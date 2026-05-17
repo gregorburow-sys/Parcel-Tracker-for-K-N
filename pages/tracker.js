@@ -5,7 +5,7 @@ import { Query } from "appwrite";
 import { useRouter } from "next/router";
 import Link from 'next/link';
 
-function classNames(...classes) {
+export function classNames(...classes) {
   return classes.filter(Boolean).join(' ')
 }
 
