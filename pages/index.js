@@ -6,6 +6,7 @@ import { useState } from "react";
 import config from "../utils/config";
 import { useRouter } from 'next/router';
 import appwrite from "../utils/appwrite-connection";
+import { transformParcelResponse } from "../utils/data-transform";
  
 export default function Home() {
  const [isLoading, setLoading] = useState(false);
@@ -22,10 +23,7 @@ export default function Home() {
        trackingNo
      );
      
-    const resolvedResponse = { 
-      ...(response || {}), 
-      name: response["parcel-name"] 
-    };
+    const resolvedResponse = transformParcelResponse(response);
 
      setParcel(() => resolvedResponse);
      router.push({
