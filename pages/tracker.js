@@ -88,6 +88,12 @@ class Tracker extends React.Component {
   // above is intentionally never cleaned up. In a hooks/useEffect world this
   // would be a one-line cleanup return.
 
+  componentWillUnmount() {
+    if (this.unsubscribe) {
+      this.unsubscribe();
+    }
+  }
+
   render() {
     const { notifications, parcelData } = this.state;
 
