@@ -4,6 +4,7 @@ import config from '../utils/config';
 import { Query } from "appwrite";
 import { withRouter } from "next/router";
 import Link from 'next/link';
+import { transformParcelEvents } from '../utils/data-transform';
 
 function classNames(...classes) {
   return classes.filter(Boolean).join(' ')
@@ -32,14 +33,7 @@ class Tracker extends React.Component {
         config.appwriteParcelEventsID,
         [ Query.equal('parcelId', [parcelNo]) ]
       );
-      const data = response.documents.map((document) => {
-        const date = new Date(document.$updatedAt);
-        return {
-          ...document,
-          bgColor: "bg-green-500",
-          datetime: date.toLocaleString()
-        }
-      });
+      const data = transformParcelEvents(response.documents);
       this.setState({ notifications: data });
     } catch (error) {
       console.log(error);

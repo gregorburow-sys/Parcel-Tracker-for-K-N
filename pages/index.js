@@ -6,6 +6,7 @@ import styles from "../styles/Home.module.css";
 import config from "../utils/config";
 import { withRouter } from 'next/router';
 import appwrite from "../utils/appwrite-connection";
+import { transformParcelResponse } from "../utils/data-transform";
 
 class Home extends React.Component {
   constructor(props) {
@@ -52,10 +53,7 @@ class Home extends React.Component {
         trackingNo
       );
 
-      const resolvedResponse = {
-        ...(response || {}),
-        name: response["parcel-name"]
-      };
+      const resolvedResponse = transformParcelResponse(response);
 
       this.setState({ parcel: resolvedResponse });
       this.props.router.push({
