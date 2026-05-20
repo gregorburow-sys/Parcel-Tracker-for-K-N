@@ -1,50 +1,70 @@
-# Parcel Tracker Application
+# Parcel Tracker
 
-This is a application built with [Next.js](https://nextjs.org/), [Appwrite](https://appwrite.io/), and [Tailwind CSS](https://tailwindcss.com/) for tracking parcels in **real-time**.
+Real-time parcel tracking app built with [Next.js](https://nextjs.org/) (App Router),
+[Appwrite](https://appwrite.io/), and [Tailwind CSS](https://tailwindcss.com/).
 
-## Setting up the project on Appwrite
-This involves the following:
-  - Creating a database and collections.
-  - Adding attributes to the collections.  
-  - Creating an Index to query the data from the collection.
-  - Setting Collection persmissions
-  
-## Setting Environment Variables
-Building the project required the use of some environment variables, remember to include in your cloned project. They include:
-- API Endpoint URL
-- Database ID
-- Parcels Collection ID
-- Project ID
+## Stack
 
-## Running the Project
-To run the project in development environment, you can run the following commands:
+- Next.js 16 (App Router, React Server Components)
+- React 19
+- TypeScript 6
+- Tailwind CSS 4
+- Appwrite Web SDK 25 (Databases + Realtime)
+
+## Appwrite setup
+
+You need an Appwrite project with:
+
+1. A **database** containing two collections:
+   - **Parcels** — one document per parcel. The document's `$id` is the tracking number. Custom attribute used: `parcel-name` (string).
+   - **ParcelEvents** — one document per status change. Attributes used:
+     - `parcelId` (string, indexed) — the `$id` of the related parcel.
+     - `status` (string) — e.g. `created`, `in_transit`, `out_for_delivery`, `delivered`, `delayed`, `cancelled`, `returned`.
+2. An **index** on `ParcelEvents.parcelId` so the timeline query is efficient.
+3. **Collection permissions** that allow read access for the audience you want to expose the tracker to.
+
+## Environment variables
+
+Copy `.env.example` to `.env` and fill in your values:
 
 ```bash
-npm run dev
-# or
-yarn dev
+cp .env.example .env
 ```
 
-## Viewing the Project 
-To view the project on your browser, use this URL - [http://localhost:3000](http://localhost:3000).
+| Variable | Description |
+| --- | --- |
+| `NEXT_PUBLIC_API_ENDPOINT` | Appwrite REST endpoint, e.g. `https://cloud.appwrite.io/v1` |
+| `NEXT_PUBLIC_PROJECT_ID` | Appwrite project ID |
+| `NEXT_PUBLIC_DATABASE_ID` | Appwrite database ID |
+| `NEXT_PUBLIC_PARCELS_ID` | Parcels collection ID |
+| `NEXT_PUBLIC_PARCELEVENTS_ID` | ParcelEvents collection ID |
 
-You can start editing the page by modifying `pages/index.js`. The page auto-updates as you edit the file.
+All variables are `NEXT_PUBLIC_*` because they are needed by the browser-side Appwrite SDK. Make sure your collection ACLs are scoped accordingly; do **not** rely on these IDs being secret.
 
-[API routes](https://nextjs.org/docs/api-routes/introduction) can be accessed on [http://localhost:3000/api/hello](http://localhost:3000/api/hello). This endpoint can be edited in `pages/api/hello.js`.
+## Running locally
 
-The `pages/api` directory is mapped to `/api/*`. Files in this directory are treated as [API routes](https://nextjs.org/docs/api-routes/introduction) instead of React pages.
+```bash
+npm install
+npm run dev
+```
 
-## Learn More
+Open [http://localhost:3000](http://localhost:3000).
 
-To learn more about Next.js, take a look at the following resources:
+## Scripts
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Script | Purpose |
+| --- | --- |
+| `npm run dev` | Start the development server |
+| `npm run build` | Production build |
+| `npm run start` | Run the production build |
+| `npm run lint` | ESLint via `next lint` |
+| `npm run typecheck` | `tsc --noEmit` |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
+## Routes
 
-## Deploy on Vercel
+- `/` — tracking-number search form.
+- `/tracker/[id]` — live status timeline for a given parcel. Subscribes to the Appwrite Realtime channel `databases.<dbId>.collections.<parcelEventsId>.documents` and refetches on relevant events.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Deployment
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+Deploy on [Vercel](https://vercel.com/new) or any platform that supports Next.js 16. Make sure the environment variables above are configured in your hosting provider.
