@@ -1,50 +1,65 @@
 # Parcel Tracker Application
 
-This is a application built with [Next.js](https://nextjs.org/), [Appwrite](https://appwrite.io/), and [Tailwind CSS](https://tailwindcss.com/) for tracking parcels in **real-time**.
+A real-time parcel tracking application built with
+[Next.js 14 (App Router)](https://nextjs.org/),
+[Appwrite](https://appwrite.io/), and
+[Tailwind CSS](https://tailwindcss.com/).
 
-## Setting up the project on Appwrite
-This involves the following:
-  - Creating a database and collections.
-  - Adding attributes to the collections.  
-  - Creating an Index to query the data from the collection.
-  - Setting Collection persmissions
-  
-## Setting Environment Variables
-Building the project required the use of some environment variables, remember to include in your cloned project. They include:
-- API Endpoint URL
-- Database ID
-- Parcels Collection ID
-- Project ID
+## Project structure
 
-## Running the Project
-To run the project in development environment, you can run the following commands:
-
-```bash
-npm run dev
-# or
-yarn dev
+```
+app/
+  layout.tsx                  Root layout + global metadata
+  page.tsx                    Home page (Server Component) with <SearchForm />
+  globals.css                 Global styles (Tailwind directives)
+  error.tsx                   Root error boundary
+  loading.tsx                 Root loading UI
+  tracker/[trackingId]/
+    page.tsx                  Dynamic tracker route
+    error.tsx                 Route-specific error boundary
+  api/hello/route.ts          Sample Route Handler (replaces pages/api/hello.js)
+components/
+  SearchForm.tsx              Client Component – tracking number search
+  ParcelTracker.tsx           Client Component – parcel info + realtime events
+hooks/
+  useParcelTracking.ts        Fetch a single parcel by tracking ID
+  useParcelEvents.ts          List + subscribe to ParcelEvents in realtime
+lib/
+  appwrite.ts                 Appwrite Client + Databases singletons
+  config.ts                   Environment variable mapping
+  types.ts                    Shared TypeScript types
 ```
 
-## Viewing the Project 
-To view the project on your browser, use this URL - [http://localhost:3000](http://localhost:3000).
+## Setting up the project on Appwrite
 
-You can start editing the page by modifying `pages/index.js`. The page auto-updates as you edit the file.
+  - Create a database and collections (Parcels, ParcelEvents).
+  - Add attributes to the collections.
+  - Create an Index to query ParcelEvents by `parcelId`.
+  - Set the appropriate collection permissions for your client.
 
-[API routes](https://nextjs.org/docs/api-routes/introduction) can be accessed on [http://localhost:3000/api/hello](http://localhost:3000/api/hello). This endpoint can be edited in `pages/api/hello.js`.
+## Environment variables
 
-The `pages/api` directory is mapped to `/api/*`. Files in this directory are treated as [API routes](https://nextjs.org/docs/api-routes/introduction) instead of React pages.
+The app reads the following `NEXT_PUBLIC_*` variables (see `.env`):
 
-## Learn More
+- `NEXT_PUBLIC_API_ENDPOINT` – Appwrite API endpoint URL
+- `NEXT_PUBLIC_PROJECT_ID` – Appwrite project ID
+- `NEXT_PUBLIC_DATABASE_ID` – Database ID
+- `NEXT_PUBLIC_PARCELS_ID` – Parcels collection ID
+- `NEXT_PUBLIC_PARCELEVENTS_ID` – ParcelEvents collection ID
 
-To learn more about Next.js, take a look at the following resources:
+## Scripts
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
+```bash
+npm install      # install dependencies
+npm run dev      # start the dev server (http://localhost:3000)
+npm run build    # production build
+npm run start    # serve the production build
+npm run lint     # ESLint via next lint
+npm run typecheck # TypeScript --noEmit check
+```
 
 ## Deploy on Vercel
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+The easiest way to deploy a Next.js app is the
+[Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme).
+See the [Next.js deployment docs](https://nextjs.org/docs/deployment) for more.
