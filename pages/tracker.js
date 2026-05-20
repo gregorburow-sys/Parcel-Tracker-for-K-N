@@ -16,8 +16,13 @@ class Tracker extends React.Component {
       notifications: [],
       parcelData: undefined,
     };
+    // DEMO: every method bound manually in the constructor — the verbose
+    // boilerplate that motivated the move to arrow class properties / hooks.
     this.getParcelEvents = this.getParcelEvents.bind(this);
     this.registerSubcriber = this.registerSubcriber.bind(this);
+    // DEMO: stash the subscription handle here but never call it in
+    // componentWillUnmount — the textbook class-component memory leak.
+    this.unsubscribe = null;
   }
 
   async getParcelEvents(parcelNo) {
@@ -43,14 +48,34 @@ class Tracker extends React.Component {
 
   componentDidMount() {
     const { router } = this.props;
+    // DEMO: duplicate router.query into local state. Adds a redundant render
+    // and lets the two sources of truth drift — the kind of thing
+    // `useRouter()` makes obvious because you would just read it directly.
     this.setState({ parcelData: router.query });
+    // DEMO: stale read — uses router.query.$id immediately even though
+    // parcelData hasn't been committed yet. Works here only by luck.
     this.getParcelEvents(router.query.$id);
     this.registerSubcriber();
   }
 
+  // DEMO: deprecated lifecycle. React 18 logs a warning but still calls it,
+  // and it overlaps awkwardly with componentDidMount + componentDidUpdate.
+  UNSAFE_componentWillReceiveProps(nextProps) {
+    if (nextProps.router?.query?.$id !== this.props.router?.query?.$id) {
+      this.setState({ parcelData: nextProps.router.query });
+    }
+  }
+
+  shouldComponentUpdate(nextProps, nextState) {
+    // DEMO: unconditional true — boilerplate that future refactors can break.
+    return true;
+  }
+
   registerSubcriber() {
     try {
-      appwrite.client.subscribe('documents', (response) => {
+      // DEMO: capture the unsubscribe handle... and then never invoke it.
+      // Every navigation to /tracker leaks another WebSocket subscription.
+      this.unsubscribe = appwrite.client.subscribe('documents', (response) => {
         const { parcelData } = this.state;
         if (parcelData?.$id) this.getParcelEvents(parcelData?.$id);
       });
@@ -58,6 +83,10 @@ class Tracker extends React.Component {
       console.log(error, 'error');
     }
   }
+
+  // DEMO: NOTE the missing componentWillUnmount. The Appwrite subscription
+  // above is intentionally never cleaned up. In a hooks/useEffect world this
+  // would be a one-line cleanup return.
 
   render() {
     const { notifications, parcelData } = this.state;

@@ -14,8 +14,33 @@ class Home extends React.Component {
       isLoading: false,
       parcelID: undefined,
       parcel: {},
+      renderCount: 0,
     };
-    this.getParcelDetails = this.getParcelDetails.bind(this);
+    // DEMO: NOTE the missing `this.getParcelDetails = this.getParcelDetails.bind(this)`.
+    // We rely on inline arrow wrappers in render() to bind `this`, which is the
+    // classic class-component foot-gun: every render creates a fresh function,
+    // defeating any downstream PureComponent / React.memo optimization.
+  }
+
+  // DEMO: deprecated lifecycle. React 18 prints a warning in the console for
+  // UNSAFE_componentWillMount — but it still runs, which is exactly the kind
+  // of thing a legacy class-component codebase accumulates.
+  UNSAFE_componentWillMount() {
+    console.warn('[Home] UNSAFE_componentWillMount fired — deprecated lifecycle still in use');
+  }
+
+  componentDidMount() {
+    // DEMO: stale-state read combined with non-functional setState. If two of
+    // these fired in the same batch they would clobber each other instead of
+    // incrementing twice. Should be `this.setState(prev => ({ renderCount:
+    // prev.renderCount + 1 }))`.
+    this.setState({ renderCount: this.state.renderCount + 1 });
+  }
+
+  shouldComponentUpdate(nextProps, nextState) {
+    // DEMO: unconditional true — pure boilerplate that future refactors can
+    // turn into a real bug by accident.
+    return true;
   }
 
   async getParcelDetails(trackingNo) {
@@ -65,10 +90,13 @@ class Home extends React.Component {
               <input
                 type="text"
                 className="w-full px-4 h-14"
+                /* DEMO: brand-new arrow function allocated on every render */
                 onChange={(e) => this.setState({ parcelID: e.target.value })}
                 placeholder="Enter your parcel's tracking number"
               />
               <a
+                /* DEMO: another fresh closure per render — and the only thing
+                   that makes the unbound class method usable. */
                 onClick={() => this.getParcelDetails(parcelID)}
                 className="w-[12rem] px-4 flex items-center justify-center bg-white text-black"
               >
