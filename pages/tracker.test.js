@@ -1,7 +1,17 @@
+import React from "react";
 import { render, screen, waitFor, within } from "@testing-library/react";
 
+// Tracker is wrapped in withRouter(Tracker), so the HOC needs to inject a
+// router prop. We keep a settable router in this scope so each test can
+// configure router.query before rendering.
+let mockRouter = { query: {} };
+
 jest.mock("next/router", () => ({
-  useRouter: jest.fn(),
+  useRouter: () => mockRouter,
+  withRouter: (Component) =>
+    function WithRouterWrapper(props) {
+      return <Component {...props} router={mockRouter} />;
+    },
 }));
 
 jest.mock("../utils/appwrite-connection", () => ({
@@ -15,19 +25,17 @@ jest.mock("../utils/appwrite-connection", () => ({
   },
 }));
 
-const { useRouter } = require("next/router");
 const appwrite = require("../utils/appwrite-connection").default;
 const Tracker = require("./tracker").default;
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockRouter = { query: {} };
 });
 
 describe("<Tracker />", () => {
   it("displays the parcel name and id from the router query", async () => {
-    useRouter.mockReturnValue({
-      query: { $id: "P-1", name: "Birthday gift" },
-    });
+    mockRouter = { query: { $id: "P-1", name: "Birthday gift" } };
     appwrite.database.listDocuments.mockResolvedValue({ documents: [] });
 
     render(<Tracker />);
@@ -35,7 +43,11 @@ describe("<Tracker />", () => {
     expect(
       screen.getByRole("heading", { name: /Parcel Information/i })
     ).toBeInTheDocument();
-    expect(screen.getByText(/Parcel Name:\s*Birthday gift/i)).toBeInTheDocument();
+    // parcelData is set in componentDidMount, so the parcel name/no render on
+    // the second pass — use findBy to wait for it.
+    expect(
+      await screen.findByText(/Parcel Name:\s*Birthday gift/i)
+    ).toBeInTheDocument();
     expect(screen.getByText(/Parcel No:\s*P-1/i)).toBeInTheDocument();
 
     await waitFor(() => {
@@ -44,9 +56,7 @@ describe("<Tracker />", () => {
   });
 
   it("renders an empty timeline when there are no events", async () => {
-    useRouter.mockReturnValue({
-      query: { $id: "P-2", name: "Empty box" },
-    });
+    mockRouter = { query: { $id: "P-2", name: "Empty box" } };
     appwrite.database.listDocuments.mockResolvedValue({ documents: [] });
 
     render(<Tracker />);
@@ -60,9 +70,7 @@ describe("<Tracker />", () => {
   });
 
   it("renders one timeline item per event with status and locale date", async () => {
-    useRouter.mockReturnValue({
-      query: { $id: "P-3", name: "Multi-stop" },
-    });
+    mockRouter = { query: { $id: "P-3", name: "Multi-stop" } };
     const firstStamp = "2024-01-15T10:30:00.000Z";
     const secondStamp = "2024-01-16T12:00:00.000Z";
     appwrite.database.listDocuments.mockResolvedValue({
@@ -87,9 +95,7 @@ describe("<Tracker />", () => {
   });
 
   it("applies the bg-green-500 class to every event marker", async () => {
-    useRouter.mockReturnValue({
-      query: { $id: "P-4", name: "BG check" },
-    });
+    mockRouter = { query: { $id: "P-4", name: "BG check" } };
     appwrite.database.listDocuments.mockResolvedValue({
       documents: [
         { $id: "e1", status: "Step 1", $updatedAt: "2024-01-15T10:30:00.000Z" },
@@ -105,9 +111,7 @@ describe("<Tracker />", () => {
   });
 
   it("registers a realtime subscription on the documents channel", async () => {
-    useRouter.mockReturnValue({
-      query: { $id: "P-5", name: "Subscribed" },
-    });
+    mockRouter = { query: { $id: "P-5", name: "Subscribed" } };
     appwrite.database.listDocuments.mockResolvedValue({ documents: [] });
 
     render(<Tracker />);
@@ -121,9 +125,7 @@ describe("<Tracker />", () => {
   });
 
   it("renders a Home link that points back to the index route", async () => {
-    useRouter.mockReturnValue({
-      query: { $id: "P-6", name: "Has home" },
-    });
+    mockRouter = { query: { $id: "P-6", name: "Has home" } };
     appwrite.database.listDocuments.mockResolvedValue({ documents: [] });
 
     render(<Tracker />);

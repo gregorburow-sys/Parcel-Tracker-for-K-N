@@ -1,9 +1,18 @@
+import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-// Mock next/router so the component receives a controllable router instance.
+// Mock next/router. Home is wrapped in withRouter(Home), so we need to expose
+// a HOC that forwards a controllable router prop. We keep a settable mock
+// router in this scope so each test can adjust it before rendering.
+let mockRouter = { push: jest.fn() };
+
 jest.mock("next/router", () => ({
-  useRouter: jest.fn(),
+  useRouter: () => mockRouter,
+  withRouter: (Component) =>
+    function WithRouterWrapper(props) {
+      return <Component {...props} router={mockRouter} />;
+    },
 }));
 
 // Mock the Appwrite-connected singleton so tests don't reach the network.
@@ -18,15 +27,21 @@ jest.mock("../utils/appwrite-connection", () => ({
   },
 }));
 
-const { useRouter } = require("next/router");
 const appwrite = require("../utils/appwrite-connection").default;
 const Home = require("./index").default;
 
-const pushMock = jest.fn();
+let consoleWarnSpy;
 
 beforeEach(() => {
   jest.clearAllMocks();
-  useRouter.mockReturnValue({ push: pushMock });
+  mockRouter = { push: jest.fn() };
+  // Home intentionally logs from UNSAFE_componentWillMount on every render —
+  // silence it so the test output stays readable.
+  consoleWarnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+});
+
+afterEach(() => {
+  consoleWarnSpy.mockRestore();
 });
 
 describe("<Home />", () => {
@@ -85,7 +100,7 @@ describe("<Home />", () => {
 
     // Resolve so React can settle and avoid act() warnings.
     resolveLookup({ $id: "PENDING", "parcel-name": "Done" });
-    await waitFor(() => expect(pushMock).toHaveBeenCalled());
+    await waitFor(() => expect(mockRouter.push).toHaveBeenCalled());
   });
 
   it("navigates to /tracker with the transformed parcel response on success", async () => {
@@ -105,7 +120,7 @@ describe("<Home />", () => {
     await user.click(screen.getByText(/Track Parcel/i));
 
     await waitFor(() => {
-      expect(pushMock).toHaveBeenCalledWith({
+      expect(mockRouter.push).toHaveBeenCalledWith({
         pathname: "./tracker",
         query: expect.objectContaining({
           $id: "tracking-1",
@@ -134,7 +149,7 @@ describe("<Home />", () => {
     await waitFor(() => {
       expect(alertSpy).toHaveBeenCalledWith("Parcel not found");
     });
-    expect(pushMock).not.toHaveBeenCalled();
+    expect(mockRouter.push).not.toHaveBeenCalled();
     // Loading state should be cleared again after the failure resolves.
     await screen.findByPlaceholderText(/tracking number/i);
 
