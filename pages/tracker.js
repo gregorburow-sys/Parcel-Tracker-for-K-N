@@ -1,97 +1,72 @@
-import React from 'react';
-import appwrite from '../utils/appwrite-connection'
-import config from '../utils/config';
-import { Query } from "appwrite";
-import { withRouter } from "next/router";
+import React, { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/router';
 import Link from 'next/link';
+import { Query } from "appwrite";
+import appwrite from '../utils/appwrite-connection';
+import config from '../utils/config';
 
 function classNames(...classes) {
   return classes.filter(Boolean).join(' ')
 }
 
-class Tracker extends React.Component {
-  constructor(props) {
-    super(props);
-    this.state = {
-      notifications: [],
-      parcelData: undefined,
-    };
-    // DEMO: every method bound manually in the constructor — the verbose
-    // boilerplate that motivated the move to arrow class properties / hooks.
-    this.getParcelEvents = this.getParcelEvents.bind(this);
-    this.registerSubcriber = this.registerSubcriber.bind(this);
-    // DEMO: stash the subscription handle here but never call it in
-    // componentWillUnmount — the textbook class-component memory leak.
-    this.unsubscribe = null;
-  }
+function Tracker() {
+  const router = useRouter();
+  const [notifications, setNotifications] = useState([]);
+  const [parcelData, setParcelData] = useState(undefined);
 
-  async getParcelEvents(parcelNo) {
+  const getParcelEvents = useCallback(async (parcelNo) => {
     try {
       const response = await appwrite.database.listDocuments(
         config.appwriteDatabaseID,
         config.appwriteParcelEventsID,
-        [ Query.equal('parcelId', [parcelNo]) ]
+        [Query.equal('parcelId', [parcelNo])]
       );
       const data = response.documents.map((document) => {
         const date = new Date(document.$updatedAt);
         return {
           ...document,
           bgColor: "bg-green-500",
-          datetime: date.toLocaleString()
-        }
+          datetime: date.toLocaleString(),
+        };
       });
-      this.setState({ notifications: data });
+      setNotifications(data);
     } catch (error) {
       console.log(error);
     }
-  }
+  }, []);
 
-  componentDidMount() {
-    const { router } = this.props;
-    // DEMO: duplicate router.query into local state. Adds a redundant render
-    // and lets the two sources of truth drift — the kind of thing
-    // `useRouter()` makes obvious because you would just read it directly.
-    this.setState({ parcelData: router.query });
-    // DEMO: stale read — uses router.query.$id immediately even though
-    // parcelData hasn't been committed yet. Works here only by luck.
-    this.getParcelEvents(router.query.$id);
-    this.registerSubcriber();
-  }
-
-  // DEMO: deprecated lifecycle. React 18 logs a warning but still calls it,
-  // and it overlaps awkwardly with componentDidMount + componentDidUpdate.
-  UNSAFE_componentWillReceiveProps(nextProps) {
-    if (nextProps.router?.query?.$id !== this.props.router?.query?.$id) {
-      this.setState({ parcelData: nextProps.router.query });
-    }
-  }
-
-  shouldComponentUpdate(nextProps, nextState) {
-    // DEMO: unconditional true — boilerplate that future refactors can break.
-    return true;
-  }
-
-  registerSubcriber() {
+  const registerSubcriber = useCallback(() => {
     try {
-      // DEMO: capture the unsubscribe handle... and then never invoke it.
-      // Every navigation to /tracker leaks another WebSocket subscription.
-      this.unsubscribe = appwrite.client.subscribe('documents', (response) => {
-        const { parcelData } = this.state;
-        if (parcelData?.$id) this.getParcelEvents(parcelData?.$id);
+      return appwrite.client.subscribe('documents', () => {
+        const id = router.query?.$id;
+        if (id) getParcelEvents(id);
       });
     } catch (error) {
       console.log(error, 'error');
+      return undefined;
     }
-  }
+  }, [router.query, getParcelEvents]);
 
-  // DEMO: NOTE the missing componentWillUnmount. The Appwrite subscription
-  // above is intentionally never cleaned up. In a hooks/useEffect world this
-  // would be a one-line cleanup return.
+  useEffect(() => {
+    const id = router.query?.$id;
+    if (id) {
+      getParcelEvents(id);
+    }
+    const unsubscribe = registerSubcriber();
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  render() {
-    const { notifications, parcelData } = this.state;
+  useEffect(() => {
+    setParcelData(router.query);
+    if (router.query?.$id) {
+      getParcelEvents(router.query.$id);
+    }
+  }, [router.query, getParcelEvents]);
 
-    return <>
+  return <>
     <div className='flex items-center justify-center h-screen'>
       <div>
         <div className='mb-4 text-center'>
@@ -142,7 +117,6 @@ class Tracker extends React.Component {
       </div>
     </div>
     </>
-  }
 }
 
-export default withRouter(Tracker);
+export default Tracker;
