@@ -16,6 +16,10 @@ Building the project required the use of some environment variables, remember to
 - Parcels Collection ID
 - Project ID
 
+A complete list with documentation lives in [`.env.example`](./.env.example).
+Copy it to `.env` and fill in the values for your environment. `.env`
+itself is git-ignored.
+
 ## Running the Project
 To run the project in development environment, you can run the following commands:
 
@@ -48,3 +52,74 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+
+## Security
+
+The application ships with a set of defensive controls to limit the
+blast radius of abuse and DDoS attacks. See [`docs/monitoring.md`](./docs/monitoring.md)
+for the full operational runbook.
+
+### Rate limiting
+
+`middleware.js` enforces per-IP rate limits at the edge:
+
+* **Lookup routes** (`/tracker`, `/api/parcel*`): 10 requests / minute / IP.
+* **General routes**: 30 requests / minute / IP.
+* `/api/health` and `/api/metrics` are exempt so probes are not throttled.
+
+Responses include `X-RateLimit-Limit`, `X-RateLimit-Remaining`,
+`X-RateLimit-Reset`, and `X-RateLimit-Scope` headers. When the limit is
+crossed the middleware returns `429 Too Many Requests` with a
+`Retry-After` header.
+
+The default store is an in-memory `Map`. For multi-instance deployments
+swap it out for a Redis-backed store — see [`docs/monitoring.md`](./docs/monitoring.md#rate-limit-store).
+
+### Input validation
+
+Tracking numbers are validated client- and server-side via
+[`utils/validation.js`](./utils/validation.js):
+
+* Length 8–20 characters
+* Allowed characters: `A–Z`, `a–z`, `0–9`, `-`, `_`
+* Whitespace is trimmed before validation
+
+Invalid input never reaches Appwrite; users see an inline error and the
+request budget for the IP is preserved.
+
+### Security headers
+
+`next.config.js` sets the standard hardening headers on every response:
+
+* `X-Frame-Options: DENY`
+* `X-Content-Type-Options: nosniff`
+* `X-XSS-Protection: 1; mode=block`
+* `Referrer-Policy: strict-origin-when-cross-origin`
+* `Permissions-Policy` denying camera, microphone, geolocation, FLoC
+* A baseline `Content-Security-Policy` that allows Appwrite over `https`
+  and `wss`
+
+### Observability
+
+* [`/api/health`](./pages/api/health.js) — readiness probe with config
+  and Appwrite reachability checks. Returns `503` when degraded.
+* [`/api/metrics`](./pages/api/metrics.js) — Prometheus text format.
+* [`utils/logger.js`](./utils/logger.js) — structured JSON logger used
+  by every error path. Set `LOG_LEVEL=debug` to enable verbose output.
+
+### Load testing
+
+[`scripts/load-test.js`](./scripts/load-test.js) is a k6 script that
+runs the five rollback scenarios (baseline, normal, spike, sustained,
+WebSocket stress) documented in [`docs/monitoring.md`](./docs/monitoring.md).
+Run it against staging before any release:
+
+```bash
+BASE_URL=https://staging.example.com k6 run scripts/load-test.js
+```
+
+### Incident response
+
+See [`docs/monitoring.md#recovery-procedures`](./docs/monitoring.md#recovery-procedures)
+for the on-call runbook covering sustained 5xx, DDoS, WebSocket growth,
+and false-positive rate-limit scenarios.

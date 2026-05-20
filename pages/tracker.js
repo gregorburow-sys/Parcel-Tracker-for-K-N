@@ -4,6 +4,7 @@ import config from '../utils/config';
 import { Query } from "appwrite";
 import { withRouter } from "next/router";
 import Link from 'next/link';
+import logger from '../utils/logger';
 
 function classNames(...classes) {
   return classes.filter(Boolean).join(' ')
@@ -16,22 +17,21 @@ class Tracker extends React.Component {
       notifications: [],
       parcelData: undefined,
     };
-    // DEMO: every method bound manually in the constructor — the verbose
-    // boilerplate that motivated the move to arrow class properties / hooks.
     this.getParcelEvents = this.getParcelEvents.bind(this);
     this.registerSubcriber = this.registerSubcriber.bind(this);
-    // DEMO: stash the subscription handle here but never call it in
-    // componentWillUnmount — the textbook class-component memory leak.
     this.unsubscribe = null;
+    this.isUnmounted = false;
   }
 
   async getParcelEvents(parcelNo) {
+    if (!parcelNo) return;
     try {
       const response = await appwrite.database.listDocuments(
         config.appwriteDatabaseID,
         config.appwriteParcelEventsID,
         [ Query.equal('parcelId', [parcelNo]) ]
       );
+      if (this.isUnmounted) return;
       const data = response.documents.map((document) => {
         const date = new Date(document.$updatedAt);
         return {
@@ -42,51 +42,56 @@ class Tracker extends React.Component {
       });
       this.setState({ notifications: data });
     } catch (error) {
-      console.log(error);
+      logger.error("parcel_events_failed", {
+        parcelNo,
+        message: error && error.message,
+      });
     }
   }
 
   componentDidMount() {
     const { router } = this.props;
-    // DEMO: duplicate router.query into local state. Adds a redundant render
-    // and lets the two sources of truth drift — the kind of thing
-    // `useRouter()` makes obvious because you would just read it directly.
-    this.setState({ parcelData: router.query });
-    // DEMO: stale read — uses router.query.$id immediately even though
-    // parcelData hasn't been committed yet. Works here only by luck.
-    this.getParcelEvents(router.query.$id);
-    this.registerSubcriber();
-  }
-
-  // DEMO: deprecated lifecycle. React 18 logs a warning but still calls it,
-  // and it overlaps awkwardly with componentDidMount + componentDidUpdate.
-  UNSAFE_componentWillReceiveProps(nextProps) {
-    if (nextProps.router?.query?.$id !== this.props.router?.query?.$id) {
-      this.setState({ parcelData: nextProps.router.query });
+    const query = router.query || {};
+    this.setState({ parcelData: query });
+    if (query.$id) {
+      this.getParcelEvents(query.$id);
+      this.registerSubcriber();
     }
   }
 
-  shouldComponentUpdate(nextProps, nextState) {
-    // DEMO: unconditional true — boilerplate that future refactors can break.
-    return true;
+  componentDidUpdate(prevProps) {
+    const prevId = prevProps.router?.query?.$id;
+    const nextId = this.props.router?.query?.$id;
+    if (prevId !== nextId) {
+      this.setState({ parcelData: this.props.router.query });
+      if (nextId) this.getParcelEvents(nextId);
+    }
   }
 
   registerSubcriber() {
     try {
-      // DEMO: capture the unsubscribe handle... and then never invoke it.
-      // Every navigation to /tracker leaks another WebSocket subscription.
-      this.unsubscribe = appwrite.client.subscribe('documents', (response) => {
+      const handle = appwrite.client.subscribe('documents', (response) => {
+        if (this.isUnmounted) return;
         const { parcelData } = this.state;
-        if (parcelData?.$id) this.getParcelEvents(parcelData?.$id);
+        if (parcelData?.$id) this.getParcelEvents(parcelData.$id);
       });
+      this.unsubscribe = typeof handle === 'function' ? handle : null;
     } catch (error) {
-      console.log(error, 'error');
+      logger.error("parcel_subscribe_failed", { message: error && error.message });
     }
   }
 
-  // DEMO: NOTE the missing componentWillUnmount. The Appwrite subscription
-  // above is intentionally never cleaned up. In a hooks/useEffect world this
-  // would be a one-line cleanup return.
+  componentWillUnmount() {
+    this.isUnmounted = true;
+    if (typeof this.unsubscribe === 'function') {
+      try {
+        this.unsubscribe();
+      } catch (error) {
+        logger.warn("parcel_unsubscribe_failed", { message: error && error.message });
+      }
+      this.unsubscribe = null;
+    }
+  }
 
   render() {
     const { notifications, parcelData } = this.state;

@@ -6,44 +6,63 @@ import styles from "../styles/Home.module.css";
 import config from "../utils/config";
 import { withRouter } from 'next/router';
 import appwrite from "../utils/appwrite-connection";
+import { validateParcelId } from "../utils/validation";
+import logger from "../utils/logger";
+
+const DEBOUNCE_MS = 300;
 
 class Home extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
       isLoading: false,
-      parcelID: undefined,
+      parcelID: "",
       parcel: {},
-      renderCount: 0,
+      validationError: null,
     };
-    // DEMO: NOTE the missing `this.getParcelDetails = this.getParcelDetails.bind(this)`.
-    // We rely on inline arrow wrappers in render() to bind `this`, which is the
-    // classic class-component foot-gun: every render creates a fresh function,
-    // defeating any downstream PureComponent / React.memo optimization.
+    this.handleInputChange = this.handleInputChange.bind(this);
+    this.handleTrackClick = this.handleTrackClick.bind(this);
+    this.getParcelDetails = this.getParcelDetails.bind(this);
+
+    this.debounceTimer = null;
+    this.inFlightId = null;
+    this.isUnmounted = false;
   }
 
-  // DEMO: deprecated lifecycle. React 18 prints a warning in the console for
-  // UNSAFE_componentWillMount — but it still runs, which is exactly the kind
-  // of thing a legacy class-component codebase accumulates.
-  UNSAFE_componentWillMount() {
-    console.warn('[Home] UNSAFE_componentWillMount fired — deprecated lifecycle still in use');
+  componentWillUnmount() {
+    this.isUnmounted = true;
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
+    }
   }
 
-  componentDidMount() {
-    // DEMO: stale-state read combined with non-functional setState. If two of
-    // these fired in the same batch they would clobber each other instead of
-    // incrementing twice. Should be `this.setState(prev => ({ renderCount:
-    // prev.renderCount + 1 }))`.
-    this.setState({ renderCount: this.state.renderCount + 1 });
+  handleInputChange(e) {
+    const raw = e.target.value;
+    this.setState({ parcelID: raw });
+
+    if (this.debounceTimer) clearTimeout(this.debounceTimer);
+    this.debounceTimer = setTimeout(() => {
+      const result = validateParcelId(raw);
+      if (this.isUnmounted) return;
+      this.setState({ validationError: result.valid ? null : result.error });
+    }, DEBOUNCE_MS);
   }
 
-  shouldComponentUpdate(nextProps, nextState) {
-    // DEMO: unconditional true — pure boilerplate that future refactors can
-    // turn into a real bug by accident.
-    return true;
+  handleTrackClick() {
+    const { parcelID } = this.state;
+    const result = validateParcelId(parcelID);
+    if (!result.valid) {
+      this.setState({ validationError: result.error });
+      return;
+    }
+    if (this.inFlightId === result.value) return;
+    this.setState({ validationError: null });
+    this.getParcelDetails(result.value);
   }
 
   async getParcelDetails(trackingNo) {
+    this.inFlightId = trackingNo;
     try {
       this.setState({ isLoading: true });
       const response = await appwrite.database.getDocument(
@@ -51,6 +70,8 @@ class Home extends React.Component {
         config.appwriteParcelsID,
         trackingNo
       );
+
+      if (this.isUnmounted) return;
 
       const resolvedResponse = {
         ...(response || {}),
@@ -63,15 +84,23 @@ class Home extends React.Component {
         query: resolvedResponse
       })
     } catch (err) {
-      console.error(err);
-      alert(err.message)
+      logger.error("parcel_lookup_failed", {
+        message: err && err.message,
+        code: err && err.code,
+      });
+      if (!this.isUnmounted) {
+        this.setState({ validationError: err && err.message ? err.message : "Lookup failed." });
+      }
     } finally {
-      this.setState({ isLoading: false });
+      if (!this.isUnmounted) {
+        this.setState({ isLoading: false });
+      }
+      if (this.inFlightId === trackingNo) this.inFlightId = null;
     }
   }
 
   render() {
-    const { isLoading, parcelID } = this.state;
+    const { isLoading, parcelID, validationError } = this.state;
 
     return (
       <div className={styles.container}>
@@ -86,22 +115,30 @@ class Home extends React.Component {
             🛳️ Debby's Parcel Tracking App
           </h1>
           {!isLoading ? (
-            <div className="flex flex-row w-full lg:w-1/2">
-              <input
-                type="text"
-                className="w-full px-4 h-14"
-                /* DEMO: brand-new arrow function allocated on every render */
-                onChange={(e) => this.setState({ parcelID: e.target.value })}
-                placeholder="Enter your parcel's tracking number"
-              />
-              <a
-                /* DEMO: another fresh closure per render — and the only thing
-                   that makes the unbound class method usable. */
-                onClick={() => this.getParcelDetails(parcelID)}
-                className="w-[12rem] px-4 flex items-center justify-center bg-white text-black"
-              >
-                Track Parcel
-              </a>
+            <div className="flex flex-col w-full lg:w-1/2">
+              <div className="flex flex-row w-full">
+                <input
+                  type="text"
+                  className="w-full px-4 h-14"
+                  value={parcelID}
+                  onChange={this.handleInputChange}
+                  placeholder="Enter your parcel's tracking number"
+                  aria-invalid={Boolean(validationError)}
+                  aria-describedby="parcel-id-error"
+                  maxLength={20}
+                />
+                <a
+                  onClick={this.handleTrackClick}
+                  className="w-[12rem] px-4 flex items-center justify-center bg-white text-black"
+                >
+                  Track Parcel
+                </a>
+              </div>
+              {validationError ? (
+                <p id="parcel-id-error" className="mt-2 text-sm text-red-500" role="alert">
+                  {validationError}
+                </p>
+              ) : null}
             </div>
           ) : (
             <div>
